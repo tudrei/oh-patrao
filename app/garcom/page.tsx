@@ -1,107 +1,52 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
 const supabase = createClient(
   'https://wqrjvgmhqcaxskspatwv.supabase.co',
-  'sb_publishable_TsWKUdaD5A6t3uwy4z8qRQ_PRnozG0V'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxcmp2Z21ocWNheHNrc3BhdHd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDEzNTEsImV4cCI6MjEwNDAxNzM1MX0.BZzf2mCcBS5V56dLA5bmKsW7d9jdyxZqUAT2IwRsQkI'
 )
+
 interface CallRequest {
   id: string
   restaurant_id: string
   table_id: string
-  type: 'service' | 'bill'
+  type: 'service' | 'bill' | 'menu'
   status: 'pending' | 'attended' | 'cancelled'
   created_at: string
-  tables?: { table_number: string }
+  tables?: {
+    table_number: string
+  }
 }
 
-export default function GarcomDashboard() {
+export default function GarcomPage() {
   const [calls, setCalls] = useState<CallRequest[]>([])
-  const [audioEnabled, setAudioEnabled] = useState(false)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // Função para apitar sem precisar de arquivo externo
-  const playBeep = () => {
-    try {
-      const ctx = audioContextRef.current || new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)()
-      audioContextRef.current = ctx
-      
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(880, ctx.currentTime)
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5)
-      
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      
-      osc.start()
-      osc.stop(ctx.currentTime + 0.5)
-    } catch (e) {
-      console.error('Erro ao tocar som:', e)
+  const fetchCalls = async () => {
+    const { data, error } = await supabase
+      .from('call_requests')
+      .select('*, tables(table_number)')
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+
+    if (!error && data) {
+      setCalls(data as unknown as CallRequest[])
     }
-  }
-
-  const enableAudio = () => {
-    playBeep()
-    setAudioEnabled(true)
+    setLoading(false)
   }
 
   useEffect(() => {
-    // Busca chamados pendentes
-    const fetchPendingCalls = async () => {
-      const { data } = await supabase
-        .from('call_requests')
-        .select('*, tables(table_number)')
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
+    fetchCalls()
 
-      if (data) setCalls(data as CallRequest[])
-    }
-
-    fetchPendingCalls()
-
-    // Escuta em tempo real
     const channel = supabase
-      .channel('realtime-garcom')
+      .channel('realtime:call_requests')
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'call_requests',
-        },
-        async (payload) => {
-          const { data: tableData } = await supabase
-            .from('tables')
-            .select('table_number')
-            .eq('id', payload.new.table_id)
-            .single()
-
-          const newCall: CallRequest = {
-            ...payload.new as CallRequest,
-            tables: tableData || undefined,
-          }
-
-          setCalls((prev) => [newCall, ...prev])
-          playBeep()
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'call_requests',
-        },
-        (payload) => {
-          if (payload.new.status !== 'pending') {
-            setCalls((prev) => prev.filter((call) => call.id !== payload.new.id))
-          }
+        { event: '*', schema: 'public', table: 'call_requests' },
+        () => {
+          fetchCalls()
         }
       )
       .subscribe()
@@ -111,97 +56,89 @@ export default function GarcomDashboard() {
     }
   }, [])
 
-  const handleAttend = async (callId: string) => {
+  const markAttended = async (id: string) => {
     await supabase
       .from('call_requests')
       .update({ status: 'attended', attended_at: new Date().toISOString() })
-      .eq('id', callId)
+      .eq('id', id)
+
+    setCalls((prev) => prev.filter((call) => call.id !== id))
+  }
+
+  const getCallDescription = (type: string) => {
+    if (type === 'menu') return '📖 Pediu o cardápio'
+    if (type === 'bill') return '🧾 Pediu a conta'
+    return '🍽️ Chamou para fazer pedido'
   }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#09090b', color: '#f4f4f5', padding: '24px', fontFamily: 'sans-serif' }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+    <main className="min-h-screen bg-zinc-950 text-white p-6 selection:bg-amber-500">
+      <header className="max-w-2xl mx-auto mb-6 flex justify-between items-center border-b border-zinc-800 pb-4">
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: 0 }}>Painel do Garçom</h1>
-          <p style={{ color: '#a1a1aa', fontSize: '0.875rem', margin: '4px 0 0' }}>
-            {calls.length} chamado(s) aguardando
-          </p>
+          <h1 className="text-2xl font-black text-amber-500">PAINEL DO GARÇOM</h1>
+          <p className="text-sm text-zinc-400">Chamados em tempo real</p>
         </div>
-
-        {!audioEnabled ? (
-          <button
-            onClick={enableAudio}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#f59e0b',
-              color: '#000',
-              fontWeight: 'bold',
-              border: 'none',
-              borderRadius: '8px',
-              cursor: 'pointer',
-            }}
-          >
-            🔊 Ativar Som
-          </button>
-        ) : (
-          <span style={{ color: '#22c55e', fontSize: '0.875rem' }}>● Som Ativo</span>
-        )}
+        <span className="bg-zinc-800 text-white px-3 py-1 rounded-full text-xs font-semibold">
+          {calls.length} pendente(s)
+        </span>
       </header>
 
-      {calls.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#71717a' }}>
-          <p style={{ fontSize: '1.25rem' }}>Nenhum chamado pendente</p>
-          <p style={{ fontSize: '0.875rem' }}>Aguardando solicitações das mesas...</p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {calls.map((call) => {
-            const isBill = call.type === 'bill'
-            return (
-              <div
-                key={call.id}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '20px',
-                  borderRadius: '12px',
-                  backgroundColor: '#18181b',
-                  borderLeft: `8px solid ${isBill ? '#3b82f6' : '#f59e0b'}`,
-                  borderTop: '1px solid #27272a',
-                  borderRight: '1px solid #27272a',
-                  borderBottom: '1px solid #27272a',
-                }}
-              >
-                <div>
-                  <span style={{ fontSize: '1.75rem', fontWeight: '800' }}>
-                    Mesa {call.tables?.table_number ?? '...'}
-                  </span>
-                  <p style={{ margin: '6px 0 0', color: isBill ? '#60a5fa' : '#fbbf24', fontWeight: '600' }}>
-                    {isBill ? '🧾 Pediu a Conta' : '🙋 Chamou Garçom'}
-                  </p>
-                </div>
+      <div className="max-w-2xl mx-auto space-y-4">
+        {loading && <p className="text-center text-zinc-400 py-12">Carregando...</p>}
 
-                <button
-                  onClick={() => handleAttend(call.id)}
-                  style={{
-                    padding: '12px 24px',
-                    backgroundColor: '#22c55e',
-                    color: '#000',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    fontSize: '1rem',
-                  }}
+        {!loading && calls.length === 0 && (
+          <div className="text-center py-16 bg-zinc-900/50 rounded-2xl border border-zinc-800/80">
+            <p className="text-lg font-medium text-zinc-300">Nenhum chamado pendente no momento</p>
+            <p className="text-xs text-zinc-500 mt-1">Os chamados das mesas aparecerão automaticamente aqui</p>
+          </div>
+        )}
+
+        {calls.map((call) => (
+          <div
+            key={call.id}
+            className={`flex items-center justify-between p-5 rounded-2xl border transition-all ${
+              call.type === 'bill'
+                ? 'bg-red-950/30 border-red-900/50'
+                : call.type === 'menu'
+                ? 'bg-blue-950/30 border-blue-900/50'
+                : 'bg-zinc-900 border-zinc-800'
+            }`}
+          >
+            <div>
+              <div className="flex items-center gap-3">
+                <span className="text-2xl font-black text-white">
+                  Mesa {call.tables?.table_number || '--'}
+                </span>
+                <span
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                    call.type === 'bill'
+                      ? 'bg-red-500 text-zinc-950'
+                      : call.type === 'menu'
+                      ? 'bg-blue-500 text-zinc-950'
+                      : 'bg-amber-500 text-zinc-950'
+                  }`}
                 >
-                  Concluir
-                </button>
+                  {getCallDescription(call.type)}
+                </span>
               </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
+              <p className="text-xs text-zinc-400 mt-2">
+                {new Date(call.created_at).toLocaleTimeString('pt-BR', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  second: '2-digit',
+                })}
+              </p>
+            </div>
+
+            <button
+              onClick={() => markAttended(call.id)}
+              className="px-5 py-3 rounded-xl bg-emerald-500 text-zinc-950 font-bold hover:bg-emerald-400 active:scale-95 transition-all text-sm"
+            >
+              Atendido
+            </button>
+          </div>
+        ))}
+      </div>
+    </main>
   )
 }
