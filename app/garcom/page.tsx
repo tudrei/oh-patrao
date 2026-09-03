@@ -1,11 +1,22 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '@supabase/supabase-js'
+import {
+  Utensils,
+  BookOpen,
+  Receipt,
+  Check,
+  Radio,
+  Clock3,
+  BellRing,
+  Coffee,
+  ChevronRight,
+} from 'lucide-react'
 
 const supabase = createClient(
   'https://wqrjvgmhqcaxskspatwv.supabase.co',
-  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxcmp2Z21ocWNheHNrc3BhdHd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDEzNTEsImV4cCI6MjEwNDAxNzM1MX0.BZzf2mCcBS5V56dLA5bmKsW7d9jdyxZqUAT2IwRsQkI'
+  'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzIiwicmVmIjoid3Fyaml2Z21ocWF4c2tzc3BhdHd2IiwiaWF0IjoxNzg4NDEzNTEsImV4cCI6MjEwNDAxNzM1MX0.BZzf2mCcBS5V56dLA5bmKsW7d9jdyxZqUAT2IwRsQkI'
 )
 
 interface CallRequest {
@@ -20,10 +31,47 @@ interface CallRequest {
   }
 }
 
+type Filter = 'all' | 'service' | 'menu' | 'bill'
+
+const typeConfig = {
+  service: {
+    label: 'Solicitar atendimento',
+    shortLabel: 'Atendimento',
+    icon: Utensils,
+    color: 'text-orange-600',
+    bg: 'bg-orange-50',
+    border: 'border-orange-200',
+    accent: 'bg-orange-500',
+    ring: 'ring-orange-500/10',
+  },
+  menu: {
+    label: 'Solicitar cardápio',
+    shortLabel: 'Cardápio',
+    icon: BookOpen,
+    color: 'text-blue-600',
+    bg: 'bg-blue-50',
+    border: 'border-blue-200',
+    accent: 'bg-blue-500',
+    ring: 'ring-blue-500/10',
+  },
+  bill: {
+    label: 'Solicitar conta',
+    shortLabel: 'Conta',
+    icon: Receipt,
+    color: 'text-red-600',
+    bg: 'bg-red-50',
+    border: 'border-red-200',
+    accent: 'bg-red-500',
+    ring: 'ring-red-500/10',
+  },
+}
+
 export default function GarcomPage() {
   const [calls, setCalls] = useState<CallRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [filter, setFilter] = useState<'all' | 'service' | 'menu' | 'bill'>('all')
+  const [filter, setFilter] = useState<Filter>('all')
+  const [now, setNow] = useState(Date.now())
+  const [attending, setAttending] = useState<string | null>(null)
 
   const fetchCalls = async () => {
     const { data, error } = await supabase
@@ -35,6 +83,7 @@ export default function GarcomPage() {
     if (!error && data) {
       setCalls(data as unknown as CallRequest[])
     }
+
     setLoading(false)
   }
 
@@ -45,7 +94,11 @@ export default function GarcomPage() {
       .channel('realtime:call_requests')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'call_requests' },
+        {
+          event: '*',
+          schema: 'public',
+          table: 'call_requests',
+        },
         () => {
           fetchCalls()
         }
@@ -57,190 +110,354 @@ export default function GarcomPage() {
     }
   }, [])
 
+  // Atualiza o relógio a cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now())
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
+
   const markAttended = async (id: string) => {
-    await supabase
+    setAttending(id)
+
+    const { error } = await supabase
       .from('call_requests')
-      .update({ status: 'attended', attended_at: new Date().toISOString() })
+      .update({
+        status: 'attended',
+        attended_at: new Date().toISOString(),
+      })
       .eq('id', id)
 
-    setCalls((prev) => prev.filter((call) => call.id !== id))
-  }
+    if (!error) {
+      setCalls((prev) => prev.filter((call) => call.id !== id))
+    }
 
-  const getTypeConfig = (type: string) => {
-    if (type === 'bill') {
-      return {
-        badge: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-        border: 'border-l-rose-500',
-        icon: '🧾',
-        label: 'Pediu a Conta',
-      }
-    }
-    if (type === 'menu') {
-      return {
-        badge: 'bg-sky-500/20 text-sky-300 border-sky-500/40',
-        border: 'border-l-sky-500',
-        icon: '📖',
-        label: 'Pediu o Cardápio',
-      }
-    }
-    return {
-      badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-      border: 'border-l-amber-500',
-      icon: '🍽️',
-      label: 'Fazer Pedido',
-    }
+    setAttending(null)
   }
 
   const getElapsedTime = (createdAt: string) => {
-    const diffMs = Date.now() - new Date(createdAt).getTime()
+    const diffMs = now - new Date(createdAt).getTime()
     const diffMin = Math.floor(diffMs / 60000)
-    if (diffMin < 1) return 'Agora mesmo'
-    if (diffMin === 1) return 'Há 1 min'
-    return `Há ${diffMin} min`
+
+    if (diffMin < 1) return 'Agora'
+    if (diffMin === 1) return '1 min'
+    if (diffMin < 60) return `${diffMin} min`
+
+    const hours = Math.floor(diffMin / 60)
+    const minutes = diffMin % 60
+
+    if (hours === 1) {
+      return `${hours}h ${minutes}min`
+    }
+
+    return `${hours}h ${minutes}min`
   }
 
-  const filteredCalls = filter === 'all' ? calls : calls.filter((c) => c.type === filter)
+  const getElapsedMinutes = (createdAt: string) => {
+    return Math.floor(
+      (now - new Date(createdAt).getTime()) / 60000
+    )
+  }
+
+  const filteredCalls = useMemo(() => {
+    if (filter === 'all') return calls
+    return calls.filter((call) => call.type === filter)
+  }, [calls, filter])
+
+  const counts = {
+    all: calls.length,
+    service: calls.filter((c) => c.type === 'service').length,
+    menu: calls.filter((c) => c.type === 'menu').length,
+    bill: calls.filter((c) => c.type === 'bill').length,
+  }
 
   return (
-    <main className="min-h-screen bg-black text-white p-4 sm:p-6 lg:p-8">
-      <div className="max-w-4xl mx-auto">
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-zinc-800">
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
-                Central do Salão
-              </h1>
-              <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-800">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-                Ao vivo
-              </span>
-            </div>
-            <p className="text-sm text-zinc-400 mt-1">
-              Atendimento e chamados em tempo real
-            </p>
-          </div>
+    <main className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="mx-auto w-full max-w-5xl px-4 py-5 sm:px-6 sm:py-8 lg:px-8">
 
-          <div className="flex items-center gap-3 self-start sm:self-auto">
-            <div className="bg-zinc-900 border border-zinc-800 rounded-2xl px-4 py-2 text-right">
-              <p className="text-[11px] uppercase tracking-wider text-zinc-400 font-semibold">
-                Fila de Espera
-              </p>
-              <p className="text-xl font-extrabold text-white">
-                {calls.length} {calls.length === 1 ? 'mesa' : 'mesas'}
-              </p>
+        {/* HEADER */}
+        <header className="mb-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+
+            <div>
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 shadow-sm">
+                  <BellRing className="h-5 w-5 text-white" />
+                </div>
+
+                <div>
+                  <h1 className="text-xl font-bold tracking-tight text-slate-950 sm:text-2xl">
+                    Central do Salão
+                  </h1>
+
+                  <div className="mt-0.5 flex items-center gap-2">
+                    <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                      <span className="relative flex h-2 w-2">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                      </span>
+                      Sistema online
+                    </span>
+
+                    <span className="text-slate-300">•</span>
+
+                    <span className="text-xs text-slate-500">
+                      Chamados em tempo real
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* KPI */}
+            <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50">
+                <Clock3 className="h-5 w-5 text-orange-600" />
+              </div>
+
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                  Na fila
+                </p>
+
+                <p className="text-lg font-bold leading-tight text-slate-950">
+                  {calls.length}{' '}
+                  <span className="text-sm font-medium text-slate-500">
+                    {calls.length === 1 ? 'chamado' : 'chamados'}
+                  </span>
+                </p>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="flex gap-2 overflow-x-auto py-4 no-scrollbar">
-          <button
-            onClick={() => setFilter('all')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              filter === 'all'
-                ? 'bg-white text-black shadow-md'
-                : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
-            }`}
-          >
-            Todos ({calls.length})
-          </button>
-          <button
-            onClick={() => setFilter('service')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              filter === 'service'
-                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
-                : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
-            }`}
-          >
-            🍽️ Pedidos ({calls.filter((c) => c.type === 'service').length})
-          </button>
-          <button
-            onClick={() => setFilter('menu')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              filter === 'menu'
-                ? 'bg-sky-500 text-black shadow-md shadow-sky-500/20'
-                : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
-            }`}
-          >
-            📖 Cardápios ({calls.filter((c) => c.type === 'menu').length})
-          </button>
-          <button
-            onClick={() => setFilter('bill')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all ${
-              filter === 'bill'
-                ? 'bg-rose-500 text-black shadow-md shadow-rose-500/20'
-                : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
-            }`}
-          >
-            🧾 Contas ({calls.filter((c) => c.type === 'bill').length})
-          </button>
-        </div>
+        {/* FILTROS */}
+        <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
+          <div className="flex gap-1 overflow-x-auto">
+            <FilterButton
+              active={filter === 'all'}
+              onClick={() => setFilter('all')}
+              label="Todos"
+              count={counts.all}
+            />
 
-        <div className="mt-2 space-y-3">
+            <FilterButton
+              active={filter === 'service'}
+              onClick={() => setFilter('service')}
+              label="Atendimento"
+              count={counts.service}
+              icon={<Utensils className="h-3.5 w-3.5" />}
+            />
+
+            <FilterButton
+              active={filter === 'menu'}
+              onClick={() => setFilter('menu')}
+              label="Cardápio"
+              count={counts.menu}
+              icon={<BookOpen className="h-3.5 w-3.5" />}
+            />
+
+            <FilterButton
+              active={filter === 'bill'}
+              onClick={() => setFilter('bill')}
+              label="Conta"
+              count={counts.bill}
+              icon={<Receipt className="h-3.5 w-3.5" />}
+            />
+          </div>
+        </section>
+
+        {/* LISTA */}
+        <section className="space-y-3">
+
+          {/* LOADING */}
           {loading && (
-            <div className="py-24 text-center">
-              <div className="w-10 h-10 border-2 border-zinc-600 border-t-white rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-sm font-medium text-zinc-400">Carregando painel...</p>
-            </div>
-          )}
+            <div className="rounded-3xl border border-slate-200 bg-white px-6 py-24 text-center shadow-sm">
+              <div className="mx-auto mb-4 h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-slate-900" />
 
-          {!loading && filteredCalls.length === 0 && (
-            <div className="py-24 text-center rounded-3xl bg-zinc-950 border border-dashed border-zinc-800">
-              <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mx-auto mb-3 text-2xl">
-                ☕
-              </div>
-              <h2 className="text-base font-bold text-white">Nenhum chamado pendente</h2>
-              <p className="text-xs text-zinc-400 mt-1 max-w-xs mx-auto">
-                Assim que algum cliente acionar a mesa, o chamado surge automaticamente aqui.
+              <p className="text-sm font-semibold text-slate-700">
+                Carregando chamados
+              </p>
+
+              <p className="mt-1 text-xs text-slate-400">
+                Conectando ao painel do salão...
               </p>
             </div>
           )}
 
-          {filteredCalls.map((call) => {
-            const conf = getTypeConfig(call.type)
-            return (
-              <div
-                key={call.id}
-                className={`p-4 sm:p-5 rounded-2xl bg-zinc-900/90 border border-zinc-800 border-l-8 ${conf.border} flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg hover:border-zinc-700 transition-all`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className="w-14 h-14 rounded-2xl bg-zinc-800/80 border border-zinc-700 flex flex-col items-center justify-center shrink-0">
-                    <span className="text-[10px] uppercase font-bold text-zinc-400 tracking-wider">
-                      Mesa
-                    </span>
-                    <span className="text-xl font-black text-white leading-none mt-0.5">
-                      {call.tables?.table_number || '--'}
-                    </span>
-                  </div>
+          {/* EMPTY */}
+          {!loading && filteredCalls.length === 0 && (
+            <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-6 py-20 text-center shadow-sm">
 
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border ${conf.badge}`}
-                      >
-                        <span>{conf.icon}</span>
-                        <span>{conf.label}</span>
+              <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100">
+                <Coffee className="h-7 w-7 text-slate-400" />
+              </div>
+
+              <h2 className="text-base font-bold text-slate-900">
+                Tudo tranquilo por aqui
+              </h2>
+
+              <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-slate-500">
+                Não existem chamados pendentes no momento.
+                Novas solicitações aparecerão automaticamente.
+              </p>
+            </div>
+          )}
+
+          {/* CALL CARDS */}
+          {filteredCalls.map((call) => {
+            const config = typeConfig[call.type]
+            const Icon = config.icon
+            const elapsed = getElapsedMinutes(call.created_at)
+
+            const isUrgent = elapsed >= 10
+
+            return (
+              <article
+                key={call.id}
+                className={`group relative overflow-hidden rounded-2xl border bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md ${
+                  isUrgent
+                    ? 'border-red-200'
+                    : 'border-slate-200'
+                }`}
+              >
+
+                {/* BARRA LATERAL */}
+                <div
+                  className={`absolute inset-y-0 left-0 w-1 ${config.accent}`}
+                />
+
+                <div className="flex flex-col gap-4 p-4 pl-5 sm:flex-row sm:items-center sm:justify-between sm:p-5 sm:pl-6">
+
+                  {/* INFO */}
+                  <div className="flex min-w-0 items-center gap-4">
+
+                    {/* MESA */}
+                    <div className="flex h-16 w-16 shrink-0 flex-col items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
+                        Mesa
                       </span>
-                      <span className="text-xs font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                        {getElapsedTime(call.created_at)}
+
+                      <span className="mt-0.5 text-2xl font-black leading-none">
+                        {call.tables?.table_number || '--'}
                       </span>
                     </div>
-                    <p className="text-xs text-zinc-400 font-mono">
-                      Recebido às {new Date(call.created_at).toLocaleTimeString('pt-BR')}
-                    </p>
-                  </div>
-                </div>
 
-                <button
-                  onClick={() => markAttended(call.id)}
-                  className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-black font-extrabold text-sm tracking-wide transition-all shadow-md shadow-emerald-500/10 cursor-pointer text-center"
-                >
-                  Marcar como Atendido
-                </button>
-              </div>
+                    <div className="min-w-0">
+
+                      {/* TIPO */}
+                      <div className="flex flex-wrap items-center gap-2">
+
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-bold ${config.bg} ${config.color} ${config.border}`}
+                        >
+                          <Icon className="h-3.5 w-3.5" />
+                          {config.label}
+                        </span>
+
+                        {isUrgent && (
+                          <span className="rounded-lg bg-red-50 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-red-600">
+                            Aguardando há {elapsed} min
+                          </span>
+                        )}
+                      </div>
+
+                      {/* HORÁRIO */}
+                      <div className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                        <Clock3 className="h-3.5 w-3.5" />
+
+                        <span>
+                          Recebido às{' '}
+                          {new Date(call.created_at).toLocaleTimeString(
+                            'pt-BR',
+                            {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            }
+                          )}
+                        </span>
+
+                        <span className="text-slate-300">•</span>
+
+                        <span className="font-medium text-slate-500">
+                          {getElapsedTime(call.created_at)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ACTION */}
+                  <button
+                    onClick={() => markAttended(call.id)}
+                    disabled={attending === call.id}
+                    className="group/button flex w-full items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 py-3.5 text-sm font-bold text-white shadow-sm transition-all hover:bg-slate-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto"
+                  >
+                    {attending === call.id ? (
+                      <>
+                        <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                        <span>Atendendo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="h-4 w-4" />
+                        <span>Marcar atendido</span>
+                        <ChevronRight className="h-4 w-4 opacity-40 transition-transform group-hover/button:translate-x-0.5" />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </article>
             )
           })}
-        </div>
+        </section>
+
+        {/* FOOTER */}
+        <footer className="mt-8 flex items-center justify-center gap-2 text-[11px] text-slate-400">
+          <Radio className="h-3.5 w-3.5" />
+          <span>Atualização automática ativada</span>
+        </footer>
       </div>
     </main>
+  )
+}
+
+function FilterButton({
+  active,
+  onClick,
+  label,
+  count,
+  icon,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  count: number
+  icon?: React.ReactNode
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition-all ${
+        active
+          ? 'bg-slate-950 text-white shadow-sm'
+          : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'
+      }`}
+    >
+      {icon}
+
+      <span>{label}</span>
+
+      <span
+        className={`rounded-md px-1.5 py-0.5 text-[10px] ${
+          active
+            ? 'bg-white/10 text-white'
+            : 'bg-slate-100 text-slate-500'
+        }`}
+      >
+        {count}
+      </span>
+    </button>
   )
 }
