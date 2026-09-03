@@ -27,6 +27,7 @@ export default function TablePage() {
   const [error, setError] = useState<string | null>(null)
   const [cooldown, setCooldown] = useState(0)
   const [lastAction, setLastAction] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     const fetchTableData = async () => {
@@ -39,7 +40,7 @@ export default function TablePage() {
         .single()
 
       if (error || !data) {
-        setError('Mesa não encontrada. Verifique o QR Code.')
+        setError('Mesa não localizada. Por favor, escaneie novamente.')
       } else {
         setTable(data as unknown as TableInfo)
       }
@@ -58,8 +59,9 @@ export default function TablePage() {
   }, [cooldown])
 
   const sendCall = async (type: 'service' | 'bill' | 'menu') => {
-    if (!table || cooldown > 0) return
+    if (!table || cooldown > 0 || submitting) return
 
+    setSubmitting(true)
     const { error: insertError } = await supabase.from('call_requests').insert({
       restaurant_id: table.restaurant_id,
       table_id: table.id,
@@ -68,19 +70,23 @@ export default function TablePage() {
     })
 
     if (!insertError) {
-      if (type === 'service') setLastAction('Pedido solicitado!')
-      if (type === 'menu') setLastAction('Cardápio solicitado!')
-      if (type === 'bill') setLastAction('Conta solicitada!')
-      setCooldown(120)
+      if (type === 'service') setLastAction('Garçom chamado para pedido')
+      if (type === 'menu') setLastAction('Cardápio solicitado')
+      if (type === 'bill') setLastAction('Conta solicitada')
+      setCooldown(90)
     } else {
-      alert('Erro ao enviar chamado. Tente novamente.')
+      alert('Não foi possível registrar seu pedido. Tente novamente.')
     }
+    setSubmitting(false)
   }
 
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
-        <p className="text-lg font-medium">Carregando...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm font-medium tracking-wide">Carregando mesa...</p>
+        </div>
       </div>
     )
   }
@@ -88,64 +94,91 @@ export default function TablePage() {
   if (error || !table) {
     return (
       <div className="flex h-screen flex-col items-center justify-center p-6 text-center bg-zinc-950 text-white">
-        <h1 className="text-xl font-bold text-red-400">Atenção</h1>
-        <p className="mt-2 text-white">{error}</p>
+        <div className="w-14 h-14 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-4">
+          <span className="text-2xl text-red-400 font-bold">!</span>
+        </div>
+        <h1 className="text-xl font-bold text-white">QR Code Inválido</h1>
+        <p className="mt-2 text-sm text-zinc-300 max-w-xs">{error}</p>
       </div>
     )
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-zinc-950 text-white selection:bg-amber-500">
-      <header className="w-full max-w-sm text-center pt-8">
-        <span className="text-xs uppercase tracking-widest text-white font-semibold">
-          {table.restaurants?.name || 'Oh Patrão!'}
-        </span>
-        <h1 className="text-4xl font-extrabold mt-1 text-white">
+    <main className="min-h-screen bg-zinc-950 text-white flex flex-col justify-between p-6 antialiased selection:bg-amber-500">
+      <header className="w-full max-w-md mx-auto pt-6 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-zinc-900 border border-zinc-800 mb-3 shadow-inner">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-xs uppercase tracking-wider font-semibold text-white">
+            {table.restaurants?.name || 'Oh Patrão!'}
+          </span>
+        </div>
+        <h1 className="text-3xl font-extrabold tracking-tight text-white">
           Mesa {table.table_number}
         </h1>
-        <p className="text-sm text-white mt-1">
-          Toque no botão para solicitar atendimento
+        <p className="text-xs text-zinc-300 mt-1">
+          Toque na opção desejada para notificar nossa equipe
         </p>
       </header>
 
-      <div className="w-full max-w-sm flex flex-col gap-4 my-auto">
+      <div className="w-full max-w-md mx-auto space-y-3.5 my-auto">
         <button
           onClick={() => sendCall('service')}
-          disabled={cooldown > 0}
-          className="w-full py-6 rounded-2xl bg-amber-500 text-zinc-950 font-black text-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          disabled={cooldown > 0 || submitting}
+          className="w-full group relative overflow-hidden rounded-2xl bg-amber-500 p-5 text-left text-zinc-950 transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-lg shadow-amber-500/10"
         >
-          🍽️ Fazer Pedido
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-950/70">Atendimento</p>
+              <h2 className="text-xl font-black mt-0.5">Fazer Pedido</h2>
+              <p className="text-xs font-medium text-amber-950/80 mt-1">Chamar garçom para anotar seu pedido</p>
+            </div>
+            <span className="text-3xl opacity-90 transition-transform group-hover:scale-110">🍽️</span>
+          </div>
         </button>
 
         <button
           onClick={() => sendCall('menu')}
-          disabled={cooldown > 0}
-          className="w-full py-6 rounded-2xl bg-zinc-800 text-white font-bold text-xl border border-zinc-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          disabled={cooldown > 0 || submitting}
+          className="w-full group rounded-2xl bg-zinc-900 border border-zinc-800 p-5 text-left text-white transition-all duration-200 hover:border-zinc-700 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
         >
-          📖 Pedir Cardápio
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Cardápio</p>
+              <h2 className="text-xl font-bold mt-0.5">Pedir Cardápio</h2>
+              <p className="text-xs text-zinc-300 mt-1">Solicitar menu físico à equipe</p>
+            </div>
+            <span className="text-3xl opacity-80 transition-transform group-hover:scale-110">📖</span>
+          </div>
         </button>
 
         <button
           onClick={() => sendCall('bill')}
-          disabled={cooldown > 0}
-          className="w-full py-6 rounded-2xl bg-zinc-900 text-white font-bold text-xl border border-zinc-800 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          disabled={cooldown > 0 || submitting}
+          className="w-full group rounded-2xl bg-zinc-900 border border-zinc-800 p-5 text-left text-white transition-all duration-200 hover:border-zinc-700 active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none"
         >
-          🧾 Pedir a Conta
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider text-zinc-400">Encerramento</p>
+              <h2 className="text-xl font-bold mt-0.5">Pedir a Conta</h2>
+              <p className="text-xs text-zinc-300 mt-1">Trazer conta e maquininha à mesa</p>
+            </div>
+            <span className="text-3xl opacity-80 transition-transform group-hover:scale-110">🧾</span>
+          </div>
         </button>
 
         {cooldown > 0 && (
-          <div className="text-center p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+          <div className="rounded-xl bg-zinc-900/90 border border-amber-500/30 p-4 text-center backdrop-blur-sm">
             <p className="text-sm font-semibold text-amber-400">{lastAction}</p>
             <p className="text-xs text-white mt-1">
-              Aguarde {cooldown}s para enviar novo chamado
+              Próximo chamado liberado em {cooldown}s
             </p>
           </div>
         )}
       </div>
 
-      <footer className="pb-4 text-center">
-        <p className="text-[10px] text-white font-medium tracking-wide">
-          OH PATRÃO! SISTEMA DE ATENDIMENTO
+      <footer className="w-full max-w-md mx-auto pb-4 text-center">
+        <p className="text-[10px] tracking-widest text-zinc-400 font-semibold uppercase">
+          Oh Patrão! Sistema de Atendimento
         </p>
       </footer>
     </main>
