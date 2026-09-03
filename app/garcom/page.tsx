@@ -1,7 +1,12 @@
 'use client'
 
 import { useEffect, useState, useRef } from 'react'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  'https://wqrjvgmhqcaxskspatwv.supabase.co',
+  'sb_publishable_TsWKUdaD5A6t3uwy4z8qRQ_PRnozG0V'
+)
 interface CallRequest {
   id: string
   restaurant_id: string
