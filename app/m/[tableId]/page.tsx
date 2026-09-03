@@ -8,6 +8,7 @@ const supabase = createClient(
   'https://wqrjvgmhqcaxskspatwv.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indxcmp2Z21ocWNheHNrc3BhdHd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg0NDEzNTEsImV4cCI6MjEwNDAxNzM1MX0.BZzf2mCcBS5V56dLA5bmKsW7d9jdyxZqUAT2IwRsQkI'
 )
+
 interface TableInfo {
   id: string
   restaurant_id: string
@@ -48,7 +49,6 @@ export default function TablePage() {
     fetchTableData()
   }, [tableId])
 
-  // Temporizador decrescente do cooldown
   useEffect(() => {
     if (cooldown <= 0) return
     const timer = setInterval(() => {
@@ -69,7 +69,7 @@ export default function TablePage() {
 
     if (!insertError) {
       setLastAction(type === 'bill' ? 'Conta solicitada!' : 'Garçom chamado!')
-      setCooldown(120) // 2 minutos de intervalo
+      setCooldown(120)
     } else {
       alert('Erro ao enviar chamado. Tente novamente.')
     }
@@ -77,30 +77,34 @@ export default function TablePage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-zinc-950 text-zinc-100">
-        <p className="text-lg">Carregando...</p>
+      <div className="flex h-screen items-center justify-center bg-zinc-950 text-white">
+        <p className="text-lg font-medium">Carregando...</p>
       </div>
     )
   }
 
   if (error || !table) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center p-6 text-center bg-zinc-950 text-zinc-100">
-        <h1 className="text-xl font-bold text-red-500">Atenção</h1>
-        <p className="mt-2 text-zinc-400">{error}</p>
+      <div className="flex h-screen flex-col items-center justify-center p-6 text-center bg-zinc-950 text-white">
+        <h1 className="text-xl font-bold text-red-400">Atenção</h1>
+        <p className="mt-2 text-white">{error}</p>
       </div>
     )
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-zinc-950 text-zinc-100 selection:bg-amber-500">
+    <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-zinc-950 text-white selection:bg-amber-500">
       {/* Cabeçalho */}
       <header className="w-full max-w-sm text-center pt-8">
-        <span className="text-xs uppercase tracking-widest text-amber-500 font-semibold">
+        <span className="text-xs uppercase tracking-widest text-white font-semibold opacity-90">
           {table.restaurants?.name || 'Oh Patrão!'}
         </span>
-        <h1 className="text-4xl font-extrabold mt-1">Mesa {table.table_number}</h1>
-        <p className="text-xs text-zinc-400 mt-1">Toque no botão para solicitar atendimento</p>
+        <h1 className="text-4xl font-extrabold mt-1 text-white">
+          Mesa {table.table_number}
+        </h1>
+        <p className="text-sm text-white mt-1 opacity-90">
+          Toque no botão para solicitar atendimento
+        </p>
       </header>
 
       {/* Botões de Ação */}
@@ -116,7 +120,7 @@ export default function TablePage() {
         <button
           onClick={() => sendCall('bill')}
           disabled={cooldown > 0}
-          className="w-full py-8 rounded-2xl bg-zinc-800 text-zinc-100 font-bold text-xl border border-zinc-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          className="w-full py-8 rounded-2xl bg-zinc-800 text-white font-bold text-xl border border-zinc-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
         >
           🧾 Pedir a Conta
         </button>
@@ -124,16 +128,16 @@ export default function TablePage() {
         {cooldown > 0 && (
           <div className="text-center p-4 rounded-xl bg-zinc-900 border border-zinc-800">
             <p className="text-sm font-semibold text-amber-400">{lastAction}</p>
-            <p className="text-xs text-zinc-400 mt-1">
+            <p className="text-xs text-white mt-1">
               Aguarde {cooldown}s para enviar novo chamado
             </p>
           </div>
         )}
       </div>
 
-      {/* Rodapé discreto */}
+      {/* Rodapé */}
       <footer className="pb-4 text-center">
-        <p className="text-[10px] text-zinc-600 font-medium tracking-wide">
+        <p className="text-[10px] text-white font-medium tracking-wide opacity-80">
           OH PATRÃO! SISTEMA DE ATENDIMENTO
         </p>
       </footer>
