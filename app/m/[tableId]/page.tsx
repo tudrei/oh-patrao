@@ -57,7 +57,7 @@ export default function TablePage() {
     return () => clearInterval(timer)
   }, [cooldown])
 
-  const sendCall = async (type: 'service' | 'bill') => {
+  const sendCall = async (type: 'service' | 'bill' | 'menu') => {
     if (!table || cooldown > 0) return
 
     const { error: insertError } = await supabase.from('call_requests').insert({
@@ -68,7 +68,9 @@ export default function TablePage() {
     })
 
     if (!insertError) {
-      setLastAction(type === 'bill' ? 'Conta solicitada!' : 'Garçom chamado!')
+      if (type === 'service') setLastAction('Pedido solicitado!')
+      if (type === 'menu') setLastAction('Cardápio solicitado!')
+      if (type === 'bill') setLastAction('Conta solicitada!')
       setCooldown(120)
     } else {
       alert('Erro ao enviar chamado. Tente novamente.')
@@ -94,7 +96,6 @@ export default function TablePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-zinc-950 text-white selection:bg-amber-500">
-      {/* Cabeçalho */}
       <header className="w-full max-w-sm text-center pt-8">
         <span className="text-xs uppercase tracking-widest text-white font-semibold opacity-90">
           {table.restaurants?.name || 'Oh Patrão!'}
@@ -107,20 +108,27 @@ export default function TablePage() {
         </p>
       </header>
 
-      {/* Botões de Ação */}
-      <div className="w-full max-w-sm flex flex-col gap-5 my-auto">
+      <div className="w-full max-w-sm flex flex-col gap-4 my-auto">
         <button
           onClick={() => sendCall('service')}
           disabled={cooldown > 0}
-          className="w-full py-8 rounded-2xl bg-amber-500 text-zinc-950 font-black text-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          className="w-full py-6 rounded-2xl bg-amber-500 text-zinc-950 font-black text-xl shadow-lg active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
         >
-          🙋 Chamar Garçom
+          🍽️ Fazer Pedido
+        </button>
+
+        <button
+          onClick={() => sendCall('menu')}
+          disabled={cooldown > 0}
+          className="w-full py-6 rounded-2xl bg-zinc-800 text-white font-bold text-xl border border-zinc-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+        >
+          📖 Pedir Cardápio
         </button>
 
         <button
           onClick={() => sendCall('bill')}
           disabled={cooldown > 0}
-          className="w-full py-8 rounded-2xl bg-zinc-800 text-white font-bold text-xl border border-zinc-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+          className="w-full py-6 rounded-2xl bg-zinc-900 text-white font-bold text-xl border border-zinc-800 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
         >
           🧾 Pedir a Conta
         </button>
@@ -135,7 +143,6 @@ export default function TablePage() {
         )}
       </div>
 
-      {/* Rodapé */}
       <footer className="pb-4 text-center">
         <p className="text-[10px] text-white font-medium tracking-wide opacity-80">
           OH PATRÃO! SISTEMA DE ATENDIMENTO
