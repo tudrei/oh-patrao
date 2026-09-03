@@ -97,13 +97,13 @@ export default function TablePage() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-between p-6 bg-zinc-950 text-white selection:bg-amber-500">
       <header className="w-full max-w-sm text-center pt-8">
-        <span className="text-xs uppercase tracking-widest text-white font-semibold opacity-90">
+        <span className="text-xs uppercase tracking-widest text-white font-semibold">
           {table.restaurants?.name || 'Oh Patrão!'}
         </span>
         <h1 className="text-4xl font-extrabold mt-1 text-white">
           Mesa {table.table_number}
         </h1>
-        <p className="text-sm text-white mt-1 opacity-90">
+        <p className="text-sm text-white mt-1">
           Toque no botão para solicitar atendimento
         </p>
       </header>
@@ -144,7 +144,7 @@ export default function TablePage() {
       </div>
 
       <footer className="pb-4 text-center">
-        <p className="text-[10px] text-white font-medium tracking-wide opacity-80">
+        <p className="text-[10px] text-white font-medium tracking-wide">
           OH PATRÃO! SISTEMA DE ATENDIMENTO
         </p>
       </footer>
